@@ -14,10 +14,14 @@ The grader checks for:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from sovereign_agent.errors import ToolError
 from sovereign_agent.session.directory import Session
 from sovereign_agent.tools.registry import ToolRegistry, ToolResult, _RegisteredTool
+
+from .integrity import record_tool_call
 
 _SAMPLE_DATA = Path(__file__).parent / "sample_data"
 
@@ -41,9 +45,34 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
     MUST call record_tool_call(...) before returning so the integrity
     check can see what data was produced.
     """
-    # TODO 1a: load venues.json. Raise ToolError(SA_TOOL_DEPENDENCY_MISSING)
-    #          if the file is absent.
-    raise NotImplementedError("TODO 1: implement venue_search")
+    venues_path = _SAMPLE_DATA / "venues.json"
+    if not venues_path.exists():
+        raise ToolError(
+            code="SA_TOOL_DEPENDENCY_MISSING",
+            message="sample_data/venues.json not found",
+        )
+
+    venues = json.loads(venues_path.read_text())
+    results = [
+        v for v in venues
+        if v["open_now"]
+        and near.lower() in v["area"].lower()
+        and v["seats_available_evening"] >= party_size
+        and v["hire_fee_gbp"] + v["min_spend_gbp"] <= budget_max_gbp
+    ]
+
+    output = {
+        "near": near,
+        "party_size": party_size,
+        "results": results,
+        "count": len(results),
+    }
+    record_tool_call("venue_search", {"near": near, "party_size": party_size, "budget_max_gbp": budget_max_gbp}, output)
+    return ToolResult(
+        success=True,
+        output=output,
+        summary=f"venue_search({near}, party={party_size}): {len(results)} result(s)",
+    )
 
 
 # ---------------------------------------------------------------------------
