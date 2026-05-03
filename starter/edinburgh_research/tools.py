@@ -26,9 +26,6 @@ from .integrity import record_tool_call
 _SAMPLE_DATA = Path(__file__).parent / "sample_data"
 
 
-# ---------------------------------------------------------------------------
-# TODO 1 — venue_search
-# ---------------------------------------------------------------------------
 def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> ToolResult:
     """Search for Edinburgh venues near <near> that can seat the party.
 
@@ -56,9 +53,9 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
     results = [
         v for v in venues
         if v["open_now"]
-        and near.lower() in v["area"].lower()
-        and v["seats_available_evening"] >= party_size
-        and v["hire_fee_gbp"] + v["min_spend_gbp"] <= budget_max_gbp
+           and near.lower() in v["area"].lower()
+           and v["seats_available_evening"] >= party_size
+           and v["hire_fee_gbp"] + v["min_spend_gbp"] <= budget_max_gbp
     ]
 
     output = {
@@ -67,7 +64,10 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
         "results": results,
         "count": len(results),
     }
-    record_tool_call("venue_search", {"near": near, "party_size": party_size, "budget_max_gbp": budget_max_gbp}, output)
+    record_tool_call("venue_search", {
+        "near": near,
+        "party_size": party_size,
+        "budget_max_gbp": budget_max_gbp}, output)
     return ToolResult(
         success=True,
         output=output,
@@ -75,9 +75,6 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
     )
 
 
-# ---------------------------------------------------------------------------
-# TODO 2 — get_weather
-# ---------------------------------------------------------------------------
 def get_weather(city: str, date: str) -> ToolResult:
     """Look up the scripted weather for <city> on <date> (YYYY-MM-DD).
 
@@ -90,17 +87,45 @@ def get_weather(city: str, date: str) -> ToolResult:
 
     MUST call record_tool_call(...) before returning.
     """
-    raise NotImplementedError("TODO 2: implement get_weather")
+    weather_path = _SAMPLE_DATA / "weather.json"
+    if not weather_path.exists():
+        raise ToolError(
+            code="SA_TOOL_DEPENDENCY_MISSING",
+            message="sample_data/weather.json not found",
+        )
+
+    weather = json.loads(weather_path.read_text())
+    city_key = city.lower()
+
+    if city_key not in weather:
+        err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"No weather data for city: {city!r}")
+        record_tool_call("get_weather", {"city": city, "date": date}, {})
+        return ToolResult(success=False, output={}, summary=f"get_weather({city}, {date}): unknown city", error=err)
+
+    city_data = weather[city_key]
+    if date not in city_data:
+        err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"No weather data for {city!r} on {date!r}")
+        record_tool_call("get_weather", {"city": city, "date": date}, {})
+        return ToolResult(success=False, output={}, summary=f"get_weather({city}, {date}): unknown date", error=err)
+
+    entry = city_data[date]
+    output = {"city": city, "date": date, **entry}
+    record_tool_call("get_weather", {"city": city, "date": date}, output)
+    return ToolResult(
+        success=True,
+        output=output,
+        summary=f"get_weather({city}, {date}): {entry['condition']}, {entry['temperature_c']}C",
+    )
 
 
 # ---------------------------------------------------------------------------
 # TODO 3 — calculate_cost
 # ---------------------------------------------------------------------------
 def calculate_cost(
-    venue_id: str,
-    party_size: int,
-    duration_hours: int,
-    catering_tier: str = "bar_snacks",
+        venue_id: str,
+        party_size: int,
+        duration_hours: int,
+        catering_tier: str = "bar_snacks",
 ) -> ToolResult:
     """Compute the total cost for a booking.
 
