@@ -152,7 +152,63 @@ def calculate_cost(
 
     MUST call record_tool_call(...) before returning.
     """
-    raise NotImplementedError("TODO 3: implement calculate_cost")
+    catering_path = _SAMPLE_DATA / "catering.json"
+    venues_path = _SAMPLE_DATA / "venues.json"
+    for path in (catering_path, venues_path):
+        if not path.exists():
+            raise ToolError(code="SA_TOOL_DEPENDENCY_MISSING", message=f"{path.name} not found")
+
+    catering = json.loads(catering_path.read_text())
+    venues = json.loads(venues_path.read_text())
+
+    args = {"venue_id": venue_id, "party_size": party_size, "duration_hours": duration_hours, "catering_tier": catering_tier}
+
+    venue = next((v for v in venues if v["id"] == venue_id), None)
+    if venue is None:
+        err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"Unknown venue_id: {venue_id!r}")
+        record_tool_call("calculate_cost", args, {})
+        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): unknown venue", error=err)
+
+    if catering_tier not in catering["base_rates_gbp_per_head"]:
+        err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"Unknown catering_tier: {catering_tier!r}")
+        record_tool_call("calculate_cost", args, {})
+        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): unknown catering tier", error=err)
+
+    if venue_id not in catering["venue_modifiers"]:
+        err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"No modifier for venue_id: {venue_id!r}")
+        record_tool_call("calculate_cost", args, {})
+        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): no venue modifier", error=err)
+
+    base_per_head = catering["base_rates_gbp_per_head"][catering_tier]
+    venue_mult = catering["venue_modifiers"][venue_id]
+    subtotal = int(round(base_per_head * venue_mult * party_size * max(1, duration_hours)))
+    service = int(round(subtotal * catering["service_charge_percent"] / 100))
+    total = subtotal + service + venue["hire_fee_gbp"] + venue["min_spend_gbp"]
+
+    # todo: parse deposit_policy?
+    if total < 300:
+        deposit = 0
+    elif total <= 1000:
+        deposit = int(round(total * 0.20))
+    else:
+        deposit = int(round(total * 0.30))
+
+    output = {
+        "venue_id": venue_id,
+        "party_size": party_size,
+        "duration_hours": duration_hours,
+        "catering_tier": catering_tier,
+        "subtotal_gbp": subtotal,
+        "service_gbp": service,
+        "total_gbp": total,
+        "deposit_required_gbp": deposit,
+    }
+    record_tool_call("calculate_cost", args, output)
+    return ToolResult(
+        success=True,
+        output=output,
+        summary=f"calculate_cost({venue_id}, {party_size}): total £{total}, deposit £{deposit}",
+    )
 
 
 # ---------------------------------------------------------------------------
