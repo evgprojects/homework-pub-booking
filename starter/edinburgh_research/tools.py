@@ -118,9 +118,6 @@ def get_weather(city: str, date: str) -> ToolResult:
     )
 
 
-# ---------------------------------------------------------------------------
-# TODO 3 — calculate_cost
-# ---------------------------------------------------------------------------
 def calculate_cost(
         venue_id: str,
         party_size: int,
@@ -161,23 +158,27 @@ def calculate_cost(
     catering = json.loads(catering_path.read_text())
     venues = json.loads(venues_path.read_text())
 
-    args = {"venue_id": venue_id, "party_size": party_size, "duration_hours": duration_hours, "catering_tier": catering_tier}
+    args = {"venue_id": venue_id, "party_size": party_size, "duration_hours": duration_hours,
+            "catering_tier": catering_tier}
 
     venue = next((v for v in venues if v["id"] == venue_id), None)
     if venue is None:
         err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"Unknown venue_id: {venue_id!r}")
         record_tool_call("calculate_cost", args, {})
-        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): unknown venue", error=err)
+        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): unknown venue",
+                          error=err)
 
     if catering_tier not in catering["base_rates_gbp_per_head"]:
         err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"Unknown catering_tier: {catering_tier!r}")
         record_tool_call("calculate_cost", args, {})
-        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): unknown catering tier", error=err)
+        return ToolResult(success=False, output={},
+                          summary=f"calculate_cost({venue_id}, {party_size}): unknown catering tier", error=err)
 
     if venue_id not in catering["venue_modifiers"]:
         err = ToolError(code="SA_TOOL_INVALID_INPUT", message=f"No modifier for venue_id: {venue_id!r}")
         record_tool_call("calculate_cost", args, {})
-        return ToolResult(success=False, output={}, summary=f"calculate_cost({venue_id}, {party_size}): no venue modifier", error=err)
+        return ToolResult(success=False, output={},
+                          summary=f"calculate_cost({venue_id}, {party_size}): no venue modifier", error=err)
 
     base_per_head = catering["base_rates_gbp_per_head"][catering_tier]
     venue_mult = catering["venue_modifiers"][venue_id]
@@ -211,9 +212,6 @@ def calculate_cost(
     )
 
 
-# ---------------------------------------------------------------------------
-# TODO 4 — generate_flyer
-# ---------------------------------------------------------------------------
 def generate_flyer(session: Session, event_details: dict) -> ToolResult:
     """Produce an HTML flyer and write it to workspace/flyer.html.
 
@@ -236,7 +234,82 @@ def generate_flyer(session: Session, event_details: dict) -> ToolResult:
     IMPORTANT: this tool MUST be registered with parallel_safe=False
     because it writes a file.
     """
-    raise NotImplementedError("TODO 4: implement generate_flyer")
+    flyer_path = session.workspace_dir / "flyer.html"
+    flyer_path.parent.mkdir(parents=True, exist_ok=True)
+
+    venue_name = event_details.get("venue_name", "")
+    venue_address = event_details.get("venue_address", "")
+    date = event_details.get("date", "")
+    time = event_details.get("time", "")
+    party_size = event_details.get("party_size", "")
+    condition = event_details.get("condition", "")
+    temperature_c = event_details.get("temperature_c", "")
+    total_gbp = event_details.get("total_gbp", "")
+    deposit_required_gbp = event_details.get("deposit_required_gbp", "")
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Event Flyer</title>
+<style>
+  body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f9f9f9; }}
+  h1 {{ color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; }}
+  dl {{ background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+  dt {{ font-weight: bold; color: #555; margin-top: 12px; }}
+  dd {{ margin: 4px 0 0 0; color: #333; font-size: 1.1em; }}
+  .section {{ margin-top: 24px; }}
+  .section h2 {{ color: #2c3e50; font-size: 1.1em; margin-bottom: 8px; }}
+</style>
+</head>
+<body>
+<h1>Event Flyer</h1>
+<dl>
+  <dt>Venue</dt>
+  <dd data-testid="venue_name">{venue_name}</dd>
+  <dt>Address</dt>
+  <dd data-testid="venue_address">{venue_address}</dd>
+  <dt>Date</dt>
+  <dd data-testid="date">{date}</dd>
+  <dt>Time</dt>
+  <dd data-testid="time">{time}</dd>
+  <dt>Party Size</dt>
+  <dd data-testid="party_size">{party_size}</dd>
+</dl>
+
+<div class="section">
+  <h2>Weather</h2>
+  <dl>
+    <dt>Condition</dt>
+    <dd data-testid="condition">{condition}</dd>
+    <dt>Temperature</dt>
+    <dd data-testid="temperature_c">{temperature_c}C</dd>
+  </dl>
+</div>
+
+<div class="section">
+  <h2>Cost Breakdown</h2>
+  <dl>
+    <dt>Total</dt>
+    <dd data-testid="total">£{total_gbp}</dd>
+    <dt>Deposit Required</dt>
+    <dd data-testid="deposit">£{deposit_required_gbp}</dd>
+  </dl>
+</div>
+</body>
+</html>"""
+
+    flyer_path.write_text(html, encoding="utf-8")
+    bytes_written = len(html)
+    relative_path = "workspace/flyer.html"
+
+    output = {"path": relative_path, "bytes_written": bytes_written}
+    record_tool_call("generate_flyer", {"event_details": event_details}, output)
+    return ToolResult(
+        success=True,
+        output=output,
+        summary=f"generate_flyer: wrote {relative_path} ({bytes_written} chars)",
+    )
 
 
 # ---------------------------------------------------------------------------
