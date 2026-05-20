@@ -184,7 +184,7 @@ def calculate_cost(
     venue_mult = catering["venue_modifiers"][venue_id]
     subtotal = int(round(base_per_head * venue_mult * party_size * max(1, duration_hours)))
     service = int(round(subtotal * catering["service_charge_percent"] / 100))
-    total = subtotal + service + venue["hire_fee_gbp"] + venue["min_spend_gbp"]
+    total = max(subtotal, venue["min_spend_gbp"]) + service + venue["hire_fee_gbp"]
 
     # todo: parse deposit_policy?
     if total < 300:
